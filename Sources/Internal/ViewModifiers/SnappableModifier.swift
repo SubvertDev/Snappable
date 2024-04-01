@@ -1,94 +1,98 @@
 import SwiftUI
+import SwiftUIIntrospect
 
 internal struct SnappableModifier: ViewModifier {
-  private let snapAlignment: SnapAlignment
-  private let snapMode: SnapMode
-  private let draggingDetector: DraggingDetector
-  private let coordinateSpaceName: UUID
-
-  @State private var parentAnchor: CGPoint = .zero
-  @State private var childSnapAnchors: [SnapID: CGPoint] = [:]
-  @State private var snapCandidateID: SnapID?
-  @Binding private var selection : SnapID?
-
-  internal init(
+    private let snapAlignment: SnapAlignment
+    private let snapMode: SnapMode
+    private let draggingDetector: DraggingDetector
+    private let coordinateSpaceName: UUID
+    
+    @State private var parentAnchor: CGPoint = .zero
+    @State private var childSnapAnchors: [SnapID: CGPoint] = [:]
+    @State private var snapCandidateID: SnapID?
+    @Binding private var selection: SnapID?
+    
+    internal init(
         alignment: SnapAlignment,
         mode: SnapMode,
-        selection : Binding<SnapID?>? = .constant(nil)
-  ) {
-    self.snapAlignment = alignment
-    self.snapMode = mode
-    self.draggingDetector = DraggingDetector(snapMode: mode)
-    self.coordinateSpaceName = UUID()
-    self._selection = selection ?? .constant(nil)
-  }
-
-  internal func body(content: Content) -> some View {
-    ScrollViewReader { scrollViewProxy in
-      content
-        .coordinateSpace(name: coordinateSpaceName)
-        .environment(\.coordinateSpaceName, coordinateSpaceName)
-        .environment(\.snapAlignment, snapAlignment)
-        .introspectScrollView { scrollView in
-          scrollView.decelerationRate = snapMode.decelerationRate
-          scrollView.delegate = draggingDetector
-        }
-        .background(
-          GeometryReader { geometryProxy -> Color in
-            DispatchQueue.main.async {
-              // This may be called multiple times in ScrollView frame updates
-              parentAnchor = snapAlignment.point(in: geometryProxy.size)
-            }
-            return Color.clear
-          }
-        )
-        .onPreferenceChange(SnapAnchorPreferenceKey.self) { anchors in
-          childSnapAnchors = anchors
-
-          let willSnap = anchors.min { leftPair, rightPair in
-            let leftDistance = parentAnchor.distance(leftPair.value)
-            let rightDistance = parentAnchor.distance(rightPair.value)
-
-            return leftDistance < rightDistance
-          }
-          if let id = willSnap?.key {
-            snapCandidateID = id
-          }
-        }
-        .onAppear {
-          if let id = selection {
-              DispatchQueue.main.async {
-                  scrollViewProxy.scrollTo(id, anchor: snapAlignment.unitPoint)
-              }
-		      }
-          draggingDetector.captureSnapID = { snapCandidateID }
-          draggingDetector.flickTarget = { velocity in
-            guard let current = snapCandidateID,
-                  let currentAnchor = childSnapAnchors[current] else { return snapCandidateID }
-
-            let willSnap = childSnapAnchors
-              .filter { _, value in
-                let fromCurrent = value.subtract(currentAnchor)
-                return velocity.innerProduct(fromCurrent) > 0
-              }
-              .min { leftPair, rightPair in
-                let leftDistance = parentAnchor.distance(leftPair.value)
-                let rightDistance = parentAnchor.distance(rightPair.value)
-
-                return leftDistance < rightDistance
-              }
-
-            return willSnap?.key ?? snapCandidateID
-          }
-          draggingDetector.scrollTo = { id in
-            DispatchQueue.main.async {  // Avoid a crash when scrolling is stopped by touch
-              withAnimation {
-                scrollViewProxy.scrollTo(id, anchor: snapAlignment.unitPoint)
-                selection = id
-              }
-            }
-          }
+        selection: Binding<SnapID?>? = .constant(nil)
+    ) {
+        self.snapAlignment = alignment
+        self.snapMode = mode
+        self.draggingDetector = DraggingDetector(snapMode: mode)
+        self.coordinateSpaceName = UUID()
+        self._selection = selection ?? .constant(nil)
+    }
+    
+    internal func body(content: Content) -> some View {
+        ScrollViewReader { scrollViewProxy in
+            content
+                .coordinateSpace(name: coordinateSpaceName)
+                .environment(\.coordinateSpaceName, coordinateSpaceName)
+                .environment(\.snapAlignment, snapAlignment)
+                .introspect(.scrollView, on: .iOS(.v15, .v16, .v17)) { scrollView in
+                    scrollView.decelerationRate = snapMode.decelerationRate
+                    scrollView.delegate = draggingDetector
+                }
+                .background(
+                    GeometryReader { geometryProxy -> Color in
+                        DispatchQueue.main.async {
+                            // This may be called multiple times in ScrollView frame updates
+                            parentAnchor = snapAlignment.point(in: geometryProxy.size)
+                        }
+                        return Color.clear
+                    }
+                )
+                .onPreferenceChange(SnapAnchorPreferenceKey.self) { anchors in
+                    childSnapAnchors = anchors
+                    
+                    let willSnap = anchors.min { leftPair, rightPair in
+                        let leftDistance = parentAnchor.distance(leftPair.value)
+                        let rightDistance = parentAnchor.distance(rightPair.value)
+                        
+                        return leftDistance < rightDistance
+                    }
+                    if let id = willSnap?.key {
+                        snapCandidateID = id
+                    }
+                }
+                .onAppear {
+                    if let id = selection {
+                        DispatchQueue.main.async {
+                            scrollViewProxy.scrollTo(id, anchor: snapAlignment.unitPoint)
+                        }
+                    }
+                    draggingDetector.captureSnapID = { snapCandidateID }
+                    draggingDetector.flickTarget = { velocity in
+                        guard let current = snapCandidateID,
+                              let currentAnchor = childSnapAnchors[current] else { return snapCandidateID }
+                        
+                        let willSnap = childSnapAnchors
+                            .filter { _, value in
+                                let fromCurrent = value.subtract(currentAnchor)
+                                return velocity.innerProduct(fromCurrent) > 0
+                            }
+                            .min { leftPair, rightPair in
+                                let leftDistance = parentAnchor.distance(leftPair.value)
+                                let rightDistance = parentAnchor.distance(rightPair.value)
+                                
+                                return leftDistance < rightDistance
+                            }
+                        
+                        return willSnap?.key ?? snapCandidateID
+                    }
+                    draggingDetector.scrollTo = { id in
+                        guard let id else { return }
+                        selection = id
+                    }
+                }
+                .onChange(of: selection) { _ in
+                    DispatchQueue.main.async {
+                        withAnimation {
+                            scrollViewProxy.scrollTo(selection, anchor: snapAlignment.unitPoint)
+                        }
+                    }
+                }
         }
     }
-  }
 }
