@@ -11,6 +11,6 @@ public extension ScrollView {
     mode: SnapMode = .immediately,
     selection: Binding<SnapID?>? = nil
   ) -> some View {
-    self.modifier(SnappableModifier(alignment: alignment, mode: mode))
+    self.modifier(SnappableModifier(alignment: alignment, mode: mode, selection: selection))
   }
 }
