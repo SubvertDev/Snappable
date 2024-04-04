@@ -55,44 +55,56 @@ internal struct SnappableModifier: ViewModifier {
                     if let id = willSnap?.key {
                         snapCandidateID = id
                     }
+                    
+                    configureDraggingDetector(proxy: scrollViewProxy)
                 }
                 .onAppear {
                     if let id = selection {
-                        DispatchQueue.main.async {
-                            scrollViewProxy.scrollTo(id, anchor: snapAlignment.unitPoint)
-                        }
+                        scrollToSelection(proxy: scrollViewProxy)
                     }
-                    draggingDetector.captureSnapID = { snapCandidateID }
-                    draggingDetector.flickTarget = { velocity in
-                        guard let current = snapCandidateID,
-                              let currentAnchor = childSnapAnchors[current] else { return snapCandidateID }
-                        
-                        let willSnap = childSnapAnchors
-                            .filter { _, value in
-                                let fromCurrent = value.subtract(currentAnchor)
-                                return velocity.innerProduct(fromCurrent) > 0
-                            }
-                            .min { leftPair, rightPair in
-                                let leftDistance = parentAnchor.distance(leftPair.value)
-                                let rightDistance = parentAnchor.distance(rightPair.value)
-                                
-                                return leftDistance < rightDistance
-                            }
-                        
-                        return willSnap?.key ?? snapCandidateID
-                    }
-                    draggingDetector.scrollTo = { id in
-                        guard let id else { return }
-                        selection = id
-                    }
+                    
+                    configureDraggingDetector(proxy: scrollViewProxy)
                 }
-                .onChange(of: selection) { _ in
-                    DispatchQueue.main.async {
-                        withAnimation {
-                            scrollViewProxy.scrollTo(selection, anchor: snapAlignment.unitPoint)
-                        }
-                    }
+                .onChange(of: selection) { targetValue in
+                    scrollToSelection(proxy: scrollViewProxy)
                 }
+        }
+    }
+    
+    private func scrollToSelection(proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withAnimation {
+                proxy.scrollTo(selection, anchor: snapAlignment.unitPoint)
+            }
+        }
+    }
+    
+    private func configureDraggingDetector(proxy: ScrollViewProxy) {
+        draggingDetector.captureSnapID = { snapCandidateID }
+        
+        draggingDetector.flickTarget = { velocity in
+            guard let current = snapCandidateID,
+                  let currentAnchor = childSnapAnchors[current] else { return snapCandidateID }
+            
+            let willSnap = childSnapAnchors
+                .filter { _, value in
+                    let fromCurrent = value.subtract(currentAnchor)
+                    return velocity.innerProduct(fromCurrent) > 0
+                }
+                .min { leftPair, rightPair in
+                    let leftDistance = parentAnchor.distance(leftPair.value)
+                    let rightDistance = parentAnchor.distance(rightPair.value)
+                    
+                    return leftDistance < rightDistance
+                }
+            
+            return willSnap?.key ?? snapCandidateID
+        }
+        
+        draggingDetector.scrollTo = { id in
+            guard let id else { return }
+            selection = id
+            scrollToSelection(proxy: proxy)
         }
     }
 }
