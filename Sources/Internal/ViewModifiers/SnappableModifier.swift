@@ -30,7 +30,7 @@ internal struct SnappableModifier: ViewModifier {
                 .coordinateSpace(name: coordinateSpaceName)
                 .environment(\.coordinateSpaceName, coordinateSpaceName)
                 .environment(\.snapAlignment, snapAlignment)
-                .introspect(.scrollView, on: .iOS(.v15, .v16, .v17)) { scrollView in
+                .introspect(.scrollView, on: .iOS(.v15, .v16, .v17, .v18)) { scrollView in
                     scrollView.decelerationRate = snapMode.decelerationRate
                     scrollView.delegate = draggingDetector
                 }
